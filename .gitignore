@@ -1,1 +1,3 @@
 *.o
+posix_test
+green_test

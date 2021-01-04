@@ -31,24 +31,44 @@ void init(){
 	
 }
 // this functions is mapped to every Context
-void green_thread(){
-	green_t * this=running;
-	// call target function and save its result
-	// place waiting (joining) thread in ready queue
-	// save result of execution and zombie status
-	// find the next thread to run and write its address to next variable
+void green_thread() {
+	green_t * this = running;
 
-	running =next;
-	setcontext(next->context);
+	// call target function and save its result
+	this->retval = this->fun(this->arg);
+
+	// place waiting (joining) thread in ready queue
+	if(this->join != NULL)
+		enQueue(ready_queue, this->join);
+
+	// save result of execution and zombie status
+	this->zombie = TRUE;
+	// TODO
+
+	// find the next thread to run and write its address to next variable
+	running = deQueue(ready_queue);
+
+	this->next = running;
+
+	setcontext(running->context);
 }
 
 // will create a new green thread
 int green_create(green_t *new ,void *(*fun)(void *),void *arg) {
 	ucontext_t * cntx = (ucontext_t *) malloc(sizeof(ucontext_t));
+	
 	// intialize cntx
+	getcontext(cntx);
+
+	// allocate stack on heap
 	void * stack = malloc(STACK_SIZE);
+	
 	// assign allocated stack to cntx
+	cntx->uc_stack.ss_sp = stack + STACK_SIZE;
+	cntx->uc_stack.ss_size = STACK_SIZE;
+	
 	// assign green_thread function to cntx
+	makecontext(cntx, (void(*) (void)) green_thread, 1, NULL);
 
 	new->context = cntx ;
 	new->fun = fun ;
@@ -57,32 +77,53 @@ int green_create(green_t *new ,void *(*fun)(void *),void *arg) {
 	new->join = NULL;
 	new->retval = NULL;
 	new->zombie = FALSE;
+	
 	// add this new thread to end of linked list
+	// TODO
 	// add new thread to the ready queue
-	return 0 ;
+	enQueue(ready_queue, new);
+
+	return 0;
 }
 
 // will give other green thread opportunity of having CPU!
 int green_yield(){
-	green_t * susp = running ;
+	green_t * susp = running;
+	
 	// add susp to ready queue
+	enQueue(ready_queue, susp);
+	
 	// select the next thread for execution
-	running = next ;
+	running = deQueue(ready_queue);
+	
 	// save current state into susp->context and switch to next->context
-	return 0 ;
+	swapcontext(susp->context, running->context);
+
+	return 0;
 }
 
 // waits for specefied thread till it finishes and get result value
 int green_join(green_t * thread ,void ** res) {
-	green_t * susp = running ;
-	// check if target thread has finished
-	// add as joining thread
-	// select the next thread for execution
-	running = next ;
-	// save current state into susp->context and switch to next->context
+	green_t * susp = running;
 	
+	// check if target thread has finished
+	if(!thread->zombie)
+	{
+		// add as joining thread
+		thread->join = susp;
+
+		// select the next thread for execution
+		running = deQueue(ready_queue);
+
+		// save current state into susp->context and switch to next->context
+		swapcontext(susp->context, running->context);
+	}
+
 	// collect result
+	*res = thread->retval;
+
 	// free context
 	free(thread->context);
-	return 0 ;
+
+	return 0;
 }
