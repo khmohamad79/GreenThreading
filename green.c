@@ -43,7 +43,6 @@ void green_thread() {
 
 	// save result of execution and zombie status
 	this->zombie = TRUE;
-	// TODO
 
 	// find the next thread to run and write its address to next variable
 	running = deQueue(ready_queue);
@@ -79,7 +78,6 @@ int green_create(green_t *new ,void *(*fun)(void *),void *arg) {
 	new->zombie = FALSE;
 	
 	// add this new thread to end of linked list
-	// TODO
 	// add new thread to the ready queue
 	enQueue(ready_queue, new);
 

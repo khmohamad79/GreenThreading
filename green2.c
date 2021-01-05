@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <unistd.h>
 #include <ucontext.h>
 #include <signal.h>
 #include <assert.h>
@@ -23,12 +24,45 @@ static green_t * running = &main_green;
 
 queue_t * ready_queue;
 
+// timer handler
+void timer_handler(union sigval v)
+{
+	green_yield();
+}
+
 // this function is called once program loads into memory regurdless of what function is called!
 static void init( ) __attribute__((constructor));
 void init(){
 	getcontext(&main_cntx);
 	ready_queue = createQueue();
 	
+	// init timer
+	timer_t timerid;
+    struct sigevent evp; 
+    memset(&evp, 0, sizeof(struct sigevent));       // Clear initialization 
+ 
+    evp.sigev_value.sival_int = 111;                // It also identifies the timer, the callback function can be obtained 
+    evp.sigev_notify = SIGEV_THREAD;                // The way of thread notification, send a new thread 
+    evp.sigev_notify_function = timer_handler;      // Thread function address 
+ 
+    if (timer_create(CLOCK_REALTIME, &evp, &timerid) == -1) 
+    {   
+        // perror("fail to timer_create"); 
+        exit(-1); 
+    }   
+ 
+    /* The first interval it.it_value is so long, every time it will be it.it_interval so long, that is, when it.it_value becomes 0, it will load the value of it.it_interval */
+    struct itimerspec it; 
+    it.it_interval.tv_sec = 0;  // The callback function is executed once every 1s
+    it.it_interval.tv_nsec = 10000; 
+    it.it_value.tv_sec = 0;     // Call back the callback function after 3 seconds
+    it.it_value.tv_nsec = 10000; 
+
+	if (timer_settime(timerid, 0, &it, NULL) == -1) 
+    {   
+        // perror("fail to timer_settime"); 
+        exit(-1); 
+    }
 }
 // this functions is mapped to every Context
 void green_thread() {
@@ -43,7 +77,6 @@ void green_thread() {
 
 	// save result of execution and zombie status
 	this->zombie = TRUE;
-	// TODO
 
 	// find the next thread to run and write its address to next variable
 	running = deQueue(ready_queue);
@@ -79,7 +112,6 @@ int green_create(green_t *new ,void *(*fun)(void *),void *arg) {
 	new->zombie = FALSE;
 	
 	// add this new thread to end of linked list
-	// TODO
 	// add new thread to the ready queue
 	enQueue(ready_queue, new);
 
@@ -123,6 +155,7 @@ int green_join(green_t * thread ,void ** res) {
 	*res = thread->retval;
 
 	// free context
+	// free(thread->context->uc_stack.ss_sp - thread->context->uc_stack.ss_size);
 	free(thread->context);
 
 	return 0;
